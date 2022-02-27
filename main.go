@@ -1,20 +1,3 @@
-// Copyright 2015 Hajime Hoshi
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-//go:build example
-// +build example
-
 package main
 
 import (
@@ -22,16 +5,21 @@ import (
 	"image/color"
 	"log"
 
+	"github.com/malparty/synth-xu/lib/generators"
+	"github.com/malparty/synth-xu/lib/generators/effects"
+	"github.com/malparty/synth-xu/lib/generators/oscillators"
+
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 
+	"github.com/faiface/beep"
+	"github.com/faiface/beep/speaker"
+
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/audio"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text"
-	"github.com/malparty/synth-xu/osc"
 )
 
 var (
@@ -62,21 +50,6 @@ const (
 	screenWidth  = 320
 	screenHeight = 240
 )
-
-// toBytes returns the 2ch little endian 16bit byte sequence with the given left/right sequence.
-func toBytes(l, r []int16) []byte {
-	if len(l) != len(r) {
-		panic("len(l) must equal to len(r)")
-	}
-	b := make([]byte, len(l)*4)
-	for i := range l {
-		b[4*i] = byte(l[i])
-		b[4*i+1] = byte(l[i] >> 8)
-		b[4*i+2] = byte(r[i])
-		b[4*i+3] = byte(r[i] >> 8)
-	}
-	return b
-}
 
 var (
 	pianoImage = ebiten.NewImage(screenWidth, screenHeight)
@@ -110,10 +83,10 @@ func init() {
 	octaveKeys := []string{"<", ">"}
 	for i, k := range octaveKeys {
 		x := i*keyWidth + 24
-		y := 256
+		y := 175
 		height := 32
 		ebitenutil.DrawRect(pianoImage, float64(x), float64(y), float64(keyWidth-1), float64(height), color.White)
-		text.Draw(pianoImage, k, arcadeFont, x+8, y+height-8, color.White)
+		text.Draw(pianoImage, k, arcadeFont, x+8, y+height-8, color.Black)
 	}
 }
 
@@ -143,47 +116,22 @@ var (
 )
 
 type Game struct {
-	Osc *osc.Osc
-
-	audioContext *audio.Context
-	player       *audio.Player
+	generator generators.Generator
 }
 
 func NewGame() *Game {
-	return &Game{}
-}
-
-func (g *Game) InitOsc() error {
-	if g.audioContext == nil {
-		g.audioContext = audio.NewContext(osc.SampleRate)
+	return &Game{
+		generator: *InitGenerators(),
 	}
-
-	if g.Osc == nil {
-		g.Osc = osc.NewOsc()
-	}
-
-	if g.player == nil {
-		// Pass the (infinite) stream to NewPlayer.
-		// After calling Play, the stream never ends as long as the player object lives.
-		var err error
-		g.player, err = g.audioContext.NewPlayer(g.Osc)
-		if err != nil {
-			return err
-		}
-		g.player.Play()
-	}
-	return nil
 }
 
 func (g *Game) Update() error {
-	g.InitOsc() // Starts oscillator stream
-
 	for i, key := range keys {
 		if !inpututil.IsKeyJustPressed(key) {
 			continue
 		}
 
-		g.Osc.MoveNote(int64(i))
+		g.generator.SetNote(i)
 	}
 
 	for _, key := range octavesKeys {
@@ -192,9 +140,9 @@ func (g *Game) Update() error {
 		}
 
 		if key == ebiten.KeyPeriod { // >
-			g.Osc.MoveOctave(false)
+			g.generator.OctaveFreqUp()
 		} else if key == ebiten.KeyComma { // >
-			g.Osc.MoveOctave(true)
+			g.generator.OctaveFreqDown()
 		}
 	}
 
@@ -210,6 +158,42 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	return screenWidth, screenHeight
+}
+
+func InitGenerators() *generators.Generator {
+	f := 512
+	speaker.Init(beep.SampleRate(generators.SampleRate), 4800)
+	// s, err := generators.SinTone(beep.SampleRate(48000), f)
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	limiter := &effects.Limiter{
+		Rate: 20.0,
+	}
+
+	reverb := &effects.Reverb{
+		MixRate:  100,
+		FadeRate: 80,
+		DelayMs:  50,
+	}
+
+	chainFunction := &generators.ChainGenerator{
+		GeneratorFuncs: []generators.GeneratorFunction{
+			oscillators.SawFunc,
+			limiter.GetLimiterFunc(),
+			reverb.GetReverbFunc(),
+		},
+	}
+
+	s2, err := generators.NewGenerator(beep.SampleRate(48000), f, chainFunction.ChainFunc)
+	if err != nil {
+		panic(err)
+	}
+	// speaker.Play(s)
+	speaker.Play(s2.GetOsc())
+
+	return s2
 }
 
 func main() {
