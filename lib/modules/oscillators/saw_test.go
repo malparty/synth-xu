@@ -3,7 +3,7 @@ package oscillators_test
 import (
 	"testing"
 
-	"github.com/malparty/synth-xu/lib/generators/oscillators"
+	"github.com/malparty/synth-xu/lib/modules/oscillators"
 )
 
 func TestSawFunc(t *testing.T) {

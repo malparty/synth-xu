@@ -3,7 +3,7 @@ package effects
 import (
 	"fmt"
 
-	"github.com/malparty/synth-xu/lib/generators"
+	"github.com/malparty/synth-xu/lib/modules"
 )
 
 type Reverb struct {
@@ -35,7 +35,7 @@ func (r *Reverb) SetDelay(delay int) {
 	r.resetBufferSize()
 }
 
-func (r *Reverb) GetReverbFunc() generators.GeneratorFunction {
+func (r *Reverb) GetModuleFunc() modules.ModuleFunction {
 	r.currentIndex = 0
 	r.buffer = []float64{}
 

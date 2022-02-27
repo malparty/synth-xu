@@ -5,9 +5,10 @@ import (
 	"image/color"
 	"log"
 
-	"github.com/malparty/synth-xu/lib/generators"
-	"github.com/malparty/synth-xu/lib/generators/effects"
-	"github.com/malparty/synth-xu/lib/generators/oscillators"
+	"github.com/malparty/synth-xu/lib/modules"
+	"github.com/malparty/synth-xu/lib/modules/effects"
+	"github.com/malparty/synth-xu/lib/modules/modulators"
+	"github.com/malparty/synth-xu/lib/modules/oscillators"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
@@ -116,22 +117,27 @@ var (
 )
 
 type Game struct {
-	generator generators.Generator
+	voice    modules.Voice
+	envelope *modulators.Envelope
 }
 
 func NewGame() *Game {
+	voice, envelope := Initmodules()
+
 	return &Game{
-		generator: *InitGenerators(),
+		voice:    *voice,
+		envelope: envelope,
 	}
 }
 
 func (g *Game) Update() error {
 	for i, key := range keys {
-		if !inpututil.IsKeyJustPressed(key) {
-			continue
+		if inpututil.IsKeyJustPressed(key) {
+			g.voice.SetNote(i)
+			g.envelope.TriggerNote()
+		} else if inpututil.IsKeyJustReleased(key) {
+			g.envelope.ReleaseNote()
 		}
-
-		g.generator.SetNote(i)
 	}
 
 	for _, key := range octavesKeys {
@@ -140,9 +146,9 @@ func (g *Game) Update() error {
 		}
 
 		if key == ebiten.KeyPeriod { // >
-			g.generator.OctaveFreqUp()
+			g.voice.OctaveFreqUp()
 		} else if key == ebiten.KeyComma { // >
-			g.generator.OctaveFreqDown()
+			g.voice.OctaveFreqDown()
 		}
 	}
 
@@ -160,46 +166,54 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	return screenWidth, screenHeight
 }
 
-func InitGenerators() *generators.Generator {
+func Initmodules() (*modules.Voice, *modulators.Envelope) {
 	f := 512
-	speaker.Init(beep.SampleRate(generators.SampleRate), 4800)
-	// s, err := generators.SinTone(beep.SampleRate(48000), f)
-	// if err != nil {
-	// 	panic(err)
-	// }
+	speaker.Init(beep.SampleRate(modules.SampleRate), 4800)
+
+	osc := &oscillators.Osc{
+		Type: oscillators.Saw,
+	}
 
 	limiter := &effects.Limiter{
 		Rate: 20.0,
 	}
 
-	reverb := &effects.Reverb{
-		MixRate:  100,
-		FadeRate: 20,
-		DelayMs:  20,
+	// reverb := &effects.Reverb{
+	// 	MixRate:  100,
+	// 	FadeRate: 20,
+	// 	DelayMs:  20,
+	// }
+
+	envelope := &modulators.Envelope{
+		Attack:  0.5,
+		Decay:   0.5,
+		Sustain: 0.75,
+		Release: 0.3,
 	}
 
-	chainFunction := &generators.ChainGenerator{
-		GeneratorFuncs: []generators.GeneratorFunction{
-			oscillators.SawFunc,
-			limiter.GetLimiterFunc(),
-			reverb.GetReverbFunc(),
-		},
-	}
+	chainFunction := modules.NewChainFunc([]modules.Module{
+		osc,
+		limiter,
+		// reverb,
+		envelope,
+	},
+	)
 
-	s2, err := generators.NewGenerator(beep.SampleRate(48000), f, chainFunction.ChainFunc)
+	s2, err := modules.NewVoice(beep.SampleRate(48000), f, chainFunction.ChainFunc)
 	if err != nil {
 		panic(err)
 	}
-	// speaker.Play(s)
+
 	speaker.Play(s2.GetOsc())
 
-	displayCurrentChainCycle(*chainFunction)
+	displayCurrentChainCycle(*chainFunction, envelope)
 
-	return s2
+	return s2, envelope
 }
 
-func displayCurrentChainCycle(chainFunction generators.ChainGenerator) {
+func displayCurrentChainCycle(chainFunction modules.ModulesChain, envelope *modulators.Envelope) {
 	// Build a sample to dysplay on the screen
+	envelope.TriggerNote()
 
 	positionX := 100.0
 	positionY := 200.0
@@ -209,8 +223,6 @@ func displayCurrentChainCycle(chainFunction generators.ChainGenerator) {
 
 	delta := 0.01
 	for i := 0.0; i < 2; i += delta {
-		log.Println("X: ", previousX)
-		log.Println("Y: ", previousY)
 		stat := chainFunction.ChainFunc(i, delta)
 
 		x := i * 100
