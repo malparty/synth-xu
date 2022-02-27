@@ -5,10 +5,12 @@ import (
 	"image/color"
 	"log"
 
+	"github.com/malparty/synth-xu/lib/constant"
 	"github.com/malparty/synth-xu/lib/modules"
 	"github.com/malparty/synth-xu/lib/modules/effects"
 	"github.com/malparty/synth-xu/lib/modules/modulators"
 	"github.com/malparty/synth-xu/lib/modules/oscillators"
+	"github.com/malparty/synth-xu/lib/racks"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
@@ -117,17 +119,17 @@ var (
 )
 
 type Game struct {
-	voice    modules.Voice
+	voice    *racks.Voice
 	envelope *modulators.Envelope
+	osc      *oscillators.Osc
 }
 
 func NewGame() *Game {
-	voice, envelope := Initmodules()
+	game := &Game{}
 
-	return &Game{
-		voice:    *voice,
-		envelope: envelope,
-	}
+	game.initAudioModules()
+
+	return game
 }
 
 func (g *Game) Update() error {
@@ -152,6 +154,20 @@ func (g *Game) Update() error {
 		}
 	}
 
+	if inpututil.IsKeyJustPressed(ebiten.KeyZ) {
+		g.osc.Type = oscillators.Saw
+		g.displayCurrentChainCycle()
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyX) {
+		g.osc.Type = oscillators.Sin
+		g.displayCurrentChainCycle()
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyC) {
+		g.osc.Type = oscillators.Triangle
+		g.displayCurrentChainCycle()
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyV) {
+		g.osc.Type = oscillators.Square
+		g.displayCurrentChainCycle()
+	}
+
 	return nil
 }
 
@@ -166,11 +182,11 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	return screenWidth, screenHeight
 }
 
-func Initmodules() (*modules.Voice, *modulators.Envelope) {
+func (g *Game) initAudioModules() {
 	f := 512
-	speaker.Init(beep.SampleRate(modules.SampleRate), 4800)
+	speaker.Init(beep.SampleRate(constant.SampleRate), 4800)
 
-	osc := &oscillators.Osc{
+	g.osc = &oscillators.Osc{
 		Type: oscillators.Saw,
 	}
 
@@ -178,43 +194,40 @@ func Initmodules() (*modules.Voice, *modulators.Envelope) {
 		Rate: 20.0,
 	}
 
+	// // Improvement: Make a rack lane for effects  and apply it AFTER the ADSR envelope!
 	// reverb := &effects.Reverb{
 	// 	MixRate:  100,
-	// 	FadeRate: 20,
-	// 	DelayMs:  20,
+	// 	FadeRate: 50,
+	// 	DelayMs:  40,
 	// }
 
-	envelope := &modulators.Envelope{
+	g.envelope = &modulators.Envelope{
 		Attack:  0.5,
 		Decay:   0.5,
 		Sustain: 0.75,
 		Release: 0.3,
 	}
 
-	chainFunction := modules.NewChainFunc([]modules.Module{
-		osc,
+	chainFunction := racks.NewChainFunc(g.envelope, []modules.Module{
+		g.osc,
 		limiter,
 		// reverb,
-		envelope,
 	},
 	)
 
-	s2, err := modules.NewVoice(beep.SampleRate(48000), f, chainFunction.ChainFunc)
+	voice, err := racks.NewVoice(beep.SampleRate(48000), f, chainFunction)
 	if err != nil {
 		panic(err)
 	}
+	g.voice = voice
 
-	speaker.Play(s2.GetOsc())
+	speaker.Play(voice.GetOsc())
 
-	displayCurrentChainCycle(*chainFunction, envelope)
+	g.displayCurrentChainCycle()
 
-	return s2, envelope
 }
 
-func displayCurrentChainCycle(chainFunction modules.ModulesChain, envelope *modulators.Envelope) {
-	// Build a sample to dysplay on the screen
-	envelope.TriggerNote()
-
+func (g *Game) displayCurrentChainCycle() {
 	positionX := 100.0
 	positionY := 200.0
 
@@ -222,8 +235,20 @@ func displayCurrentChainCycle(chainFunction modules.ModulesChain, envelope *modu
 	previousY := 0.0
 
 	delta := 0.01
+
+	// Remove existing content on this area:
+	ebitenutil.DrawRect(pianoImage, positionX, positionY-40, 200, 80, color.RGBA{
+		R: 200,
+		G: 100,
+		B: 200,
+		A: 255,
+	})
+
+	// Build a sample to dysplay on the screen
+	g.envelope.TriggerNote()
+
 	for i := 0.0; i < 2; i += delta {
-		stat := chainFunction.ChainFunc(i, delta)
+		stat := g.voice.ChainFunction.ChainFunc(i, delta)
 
 		x := i * 100
 		y := stat * 100
@@ -232,6 +257,8 @@ func displayCurrentChainCycle(chainFunction modules.ModulesChain, envelope *modu
 		previousX = x
 		previousY = y
 	}
+
+	g.envelope.ReleaseNote()
 }
 
 func main() {

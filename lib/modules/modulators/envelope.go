@@ -20,8 +20,9 @@ type Envelope struct {
 	Sustain float64
 	Release float64
 
-	progress float64
-	state    EnvelopeState
+	progress     float64
+	currentLevel float64
+	state        EnvelopeState
 }
 
 func (e *Envelope) ReleaseNote() {
@@ -52,7 +53,9 @@ func (e *Envelope) GetModuleFunc() modules.ModuleFunction {
 				return stat
 			}
 
-			return stat * (e.progress / e.Attack)
+			e.currentLevel = e.progress / e.Attack
+
+			return stat * e.currentLevel
 		case Decay:
 			if e.progress > e.Decay {
 				// switch to Sustain
@@ -62,7 +65,9 @@ func (e *Envelope) GetModuleFunc() modules.ModuleFunction {
 				return stat
 			}
 
-			return stat * (1 - e.progress/e.Decay*e.Sustain)
+			e.currentLevel = 1 - e.progress/e.Decay*e.Sustain
+
+			return stat * e.currentLevel
 		case Sustain:
 			return stat * (1 - e.Sustain)
 		case Release:
@@ -70,7 +75,7 @@ func (e *Envelope) GetModuleFunc() modules.ModuleFunction {
 				return 0
 			}
 
-			return stat * e.Sustain * (e.Release - e.progress)
+			return stat * e.currentLevel * (1 - e.progress/e.Release)
 		}
 
 		return 0

@@ -18,14 +18,16 @@ type Osc struct {
 }
 
 func (o *Osc) GetModuleFunc() modules.ModuleFunction {
-	switch o.Type {
-	case Saw:
-		return SawFunc
-	case Sin:
-		return SinFunc
-	case Square:
-		return SquareFunc
-	}
+	return func(stat, delta float64) float64 {
+		switch o.Type {
+		case Saw:
+			return SawFunc(stat, delta)
+		case Sin:
+			return SinFunc(stat, delta)
+		case Square:
+			return SquareFunc(stat, delta)
+		}
 
-	return TriangleFunc
+		return TriangleFunc(stat, delta)
+	}
 }
