@@ -174,8 +174,8 @@ func InitGenerators() *generators.Generator {
 
 	reverb := &effects.Reverb{
 		MixRate:  100,
-		FadeRate: 80,
-		DelayMs:  50,
+		FadeRate: 20,
+		DelayMs:  20,
 	}
 
 	chainFunction := &generators.ChainGenerator{
@@ -193,7 +193,33 @@ func InitGenerators() *generators.Generator {
 	// speaker.Play(s)
 	speaker.Play(s2.GetOsc())
 
+	displayCurrentChainCycle(*chainFunction)
+
 	return s2
+}
+
+func displayCurrentChainCycle(chainFunction generators.ChainGenerator) {
+	// Build a sample to dysplay on the screen
+
+	positionX := 100.0
+	positionY := 200.0
+
+	previousX := 0.0
+	previousY := 0.0
+
+	delta := 0.01
+	for i := 0.0; i < 2; i += delta {
+		log.Println("X: ", previousX)
+		log.Println("Y: ", previousY)
+		stat := chainFunction.ChainFunc(i, delta)
+
+		x := i * 100
+		y := stat * 100
+		ebitenutil.DrawLine(pianoImage, positionX+previousX, positionY+previousY, positionX+x, positionY+y, color.Black)
+
+		previousX = x
+		previousY = y
+	}
 }
 
 func main() {

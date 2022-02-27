@@ -9,22 +9,28 @@ import (
 type Reverb struct {
 	MixRate  float64
 	FadeRate float64
-	DelayMs  float64
+	DelayMs  int
 
-	buffer        []float64
-	bufferb       []float64
-	bufferc       []float64
-	bufferd       []float64
+	buffer  []float64
+	bufferb []float64
+	bufferc []float64
+	bufferd []float64
+
+	bufferLen  int
+	bufferbLen int
+	buffercLen int
+	bufferdLen int
+
 	currentIndex  int
 	currentIndexb int
 	currentIndexc int
 	currentIndexd int
 }
 
-func (r *Reverb) SetDelay(delay float64) {
+func (r *Reverb) SetDelay(delay int) {
 	r.DelayMs = delay
 
-	fmt.Printf("SET DELAYS: %.0f \n", delay)
+	fmt.Printf("SET DELAYS: %d \n", delay)
 
 	r.resetBufferSize()
 }
@@ -36,16 +42,16 @@ func (r *Reverb) GetReverbFunc() generators.GeneratorFunction {
 	r.resetBufferSize()
 
 	return func(stat float64, delta float64) (reverbLevel float64) {
-		if r.currentIndex >= len(r.buffer) {
+		if r.currentIndex >= r.bufferLen {
 			r.currentIndex = 0
 		}
-		if r.currentIndexb >= len(r.bufferb) {
+		if r.currentIndexb >= r.bufferbLen {
 			r.currentIndexb = 0
 		}
-		if r.currentIndexc >= len(r.bufferc) {
+		if r.currentIndexc >= r.buffercLen {
 			r.currentIndexc = 0
 		}
-		if r.currentIndexd >= len(r.bufferd) {
+		if r.currentIndexd >= r.bufferdLen {
 			r.currentIndexd = 0
 		}
 
@@ -72,15 +78,24 @@ func (r *Reverb) resetBufferSize() {
 
 	bufferSize := r.DelayMs
 
-	r.buffer = r.resizeBuffer(r.buffer, bufferSize)
-	r.bufferb = r.resizeBuffer(r.bufferb, bufferSize+5)
-	r.bufferc = r.resizeBuffer(r.bufferc, bufferSize+3)
-	r.bufferd = r.resizeBuffer(r.bufferd, bufferSize-5)
+	r.buffer = r.resizeBuffer(bufferSize)
+	r.bufferLen = bufferSize
+
+	r.bufferb = r.resizeBuffer(bufferSize + 5)
+	r.bufferbLen = bufferSize + 5
+
+	r.bufferc = r.resizeBuffer(bufferSize + 3)
+	r.buffercLen = bufferSize + 3
+
+	r.bufferd = r.resizeBuffer(bufferSize - 5)
+	r.bufferdLen = bufferSize - 5
 }
 
-func (r *Reverb) resizeBuffer(buffer []float64, size float64) []float64 {
-	sizeInt := int(size)
-	for i := 0; i < sizeInt; i++ {
+func (r *Reverb) resizeBuffer(size int) []float64 {
+	buffer := []float64{}
+
+	sizeInt := size
+	for i := 0; i < sizeInt+1; i++ {
 		buffer = append(buffer, 0)
 	}
 
