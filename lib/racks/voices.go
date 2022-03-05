@@ -61,8 +61,11 @@ func (v *Voice) SetNote(note int) {
 	}
 
 	semiToneOffset := float64(v.octaveFreq) / 12
+	freq := (float64(v.octaveFreq) + (semiToneOffset * float64(note)))
 
-	steps := v.sampleRate / (float64(v.octaveFreq) + (semiToneOffset * float64(note)))
+	v.ChainFunction.Envelope.SetFreq(freq)
+
+	steps := v.sampleRate / freq
 	v.oscStream.Delta = 1.0 / steps
 
 	v.noteFreq = note

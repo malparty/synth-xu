@@ -20,6 +20,7 @@ type Envelope struct {
 	Sustain float64
 	Release float64
 
+	freq         float64 // current freq to assure time consistency across notes
 	progress     float64
 	currentLevel float64
 	state        EnvelopeState
@@ -35,13 +36,19 @@ func (e *Envelope) TriggerNote() {
 	e.progress = 0
 }
 
+func (e *Envelope) SetFreq(freq float64) {
+	if freq > 0 {
+		e.freq = freq
+	}
+}
+
 func (e *Envelope) GetModuleFunc() modules.ModuleFunction {
 	// Init state is end of release (no sound)
 	e.progress = e.Release
 	e.state = Release
 
 	return func(stat, delta float64) float64 {
-		e.progress += delta / 1000
+		e.progress += delta / e.freq
 
 		switch e.state {
 		case Attack:

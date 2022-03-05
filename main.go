@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"log"
+	"math"
 
 	"github.com/malparty/synth-xu/lib/constant"
 	"github.com/malparty/synth-xu/lib/modules"
@@ -121,7 +122,7 @@ var (
 type Game struct {
 	voice    *racks.Voice
 	envelope *modulators.Envelope
-	osc      *oscillators.Osc
+	osc      *oscillators.MultiOsc
 }
 
 func NewGame() *Game {
@@ -155,17 +156,34 @@ func (g *Game) Update() error {
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyZ) {
-		g.osc.Type = oscillators.Saw
+		g.osc.OscA.Type = oscillators.Saw
 		g.displayCurrentChainCycle()
 	} else if inpututil.IsKeyJustPressed(ebiten.KeyX) {
-		g.osc.Type = oscillators.Sin
+		g.osc.OscA.Type = oscillators.Sin
 		g.displayCurrentChainCycle()
 	} else if inpututil.IsKeyJustPressed(ebiten.KeyC) {
-		g.osc.Type = oscillators.Triangle
+		g.osc.OscA.Type = oscillators.Triangle
 		g.displayCurrentChainCycle()
 	} else if inpututil.IsKeyJustPressed(ebiten.KeyV) {
-		g.osc.Type = oscillators.Square
+		g.osc.OscB.Type = oscillators.Square
 		g.displayCurrentChainCycle()
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyB) {
+		g.osc.OscB.Type = oscillators.Saw
+		g.displayCurrentChainCycle()
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyN) {
+		g.osc.OscB.Type = oscillators.Sin
+		g.displayCurrentChainCycle()
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyArrowLeft) {
+		if g.osc.MixPercent < 96 {
+			g.osc.MixPercent += 5
+			g.displayCurrentChainCycle()
+		}
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowRight) {
+		if g.osc.MixPercent > 4 {
+			g.osc.MixPercent -= 5
+			g.displayCurrentChainCycle()
+		}
 	}
 
 	return nil
@@ -186,15 +204,23 @@ func (g *Game) initAudioModules() {
 	f := 512
 	speaker.Init(beep.SampleRate(constant.SampleRate), 4800)
 
-	g.osc = &oscillators.Osc{
+	oscA := &oscillators.Osc{
 		Type: oscillators.Saw,
+	}
+	oscB := &oscillators.Osc{
+		Type: oscillators.Sin,
+	}
+	g.osc = &oscillators.MultiOsc{
+		OscA:       oscA,
+		OscB:       oscB,
+		MixPercent: 0,
 	}
 
 	limiter := &effects.Limiter{
 		Rate: 20.0,
 	}
 
-	// // Improvement: Make a rack lane for effects  and apply it AFTER the ADSR envelope!
+	// Improvement: Make a rack lane for effects  and apply it AFTER the ADSR envelope!
 	// reverb := &effects.Reverb{
 	// 	MixRate:  100,
 	// 	FadeRate: 50,
@@ -202,9 +228,9 @@ func (g *Game) initAudioModules() {
 	// }
 
 	g.envelope = &modulators.Envelope{
-		Attack:  0.5,
-		Decay:   0.5,
-		Sustain: 0.75,
+		Attack:  0.1,
+		Decay:   0.1,
+		Sustain: 0.8,
 		Release: 0.3,
 	}
 
@@ -248,7 +274,8 @@ func (g *Game) displayCurrentChainCycle() {
 	g.envelope.TriggerNote()
 
 	for i := 0.0; i < 2; i += delta {
-		stat := g.voice.ChainFunction.ChainFunc(i, delta)
+		_, stat := math.Modf(i)
+		stat = g.voice.ChainFunction.ChainFunc(stat, delta)
 
 		x := i * 100
 		y := stat * 100

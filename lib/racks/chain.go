@@ -8,12 +8,14 @@ import (
 type ModulesChain struct {
 	moduleFuncs  []modules.ModuleFunction
 	envelopeFunc modules.ModuleFunction
+	Envelope     *modulators.Envelope
 }
 
 func NewChainFunc(envelope *modulators.Envelope, moduleItems []modules.Module) *ModulesChain {
 	envFunc := envelope.GetModuleFunc()
 
 	chain := &ModulesChain{
+		Envelope:     envelope,
 		moduleFuncs:  []modules.ModuleFunction{},
 		envelopeFunc: envFunc,
 	}
